@@ -1,1 +1,0 @@
-# R-Lightning-Talk
