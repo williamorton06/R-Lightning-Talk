@@ -1,0 +1,468 @@
+---
+title: "The Gravity of Giants"
+subtitle: "The 'Magnificent Seven'"
+author: "William Orton"
+format: 
+  revealjs:
+    theme: sky
+---
+
+```{r}
+#| echo: false
+library(tidyverse)
+library(tidyquant)
+```
+
+# What is the S&P 500?
+
+- Stock market index (measures the performance of stocks, like a scoreboard)
+- Tracks the largest 500 companies in the United States
+
+# What if **seven companies** in the S&P 500 dominated the [entire]{.underline} market? {style="font-size: 25px; color: #f8fafc; line-height: 1.2;"}
+
+## "The Magnificent Seven"
+
+- Apple
+- Amazon
+- Microsoft
+- Alphabet (owns Google)
+- Meta Platforms
+- Nvidia
+- Tesla
+
+## The Great Market Divide
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+
+library(tidyquant)
+library(tidyverse)
+library(scales)
+
+# Define groups
+mag_7 <- c("AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA")
+spy_ticker <- "SPY"
+
+# Get data
+all_data <- tq_get(c(mag_7, spy_ticker), from = "2023-01-01")
+
+# Calculate returns
+returns_data <- all_data %>%
+  group_by(symbol) %>%
+  tq_transmute(select = adjusted, mutate_fun = periodReturn, period = "daily", col_rename = "ret") %>%
+  mutate(cum_ret = cumprod(1 + ret) - 1)
+
+# Separate mag 7 average from index
+mag7_avg <- returns_data %>%
+  filter(symbol %in% mag_7) %>%
+  group_by(date) %>%
+  summarize(cum_ret = mean(cum_ret), group = "Magnificent Seven")
+
+market_bench <- returns_data %>%
+  filter(symbol == "SPY") %>%
+  select(date, cum_ret) %>%
+  mutate(group = "S&P 493 (Rest of Market)")
+
+# plot
+ggplot() +
+  geom_line(data = mag7_avg, aes(x = date, y = cum_ret, color = group), size = 1.5) +
+  geom_line(data = market_bench, aes(x = date, y = cum_ret, color = group), size = 1, linetype = "dashed") +
+  scale_y_continuous(labels = percent) +
+  scale_color_manual(values = c("Magnificent Seven" = "#38bdf8", "S&P 493 (Rest of Market)" = "red")) +
+  labs(x = NULL, y = "Cumulative Return", color = NULL) +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+
+<div style="font-size: 0.9em;">
+- These seven companies are growing way faster than the other 493
+- The "Giants" are carrying the weight of the entire market
+</div>
+
+## The High Cost of Growth
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# Get prices first
+prices <- tq_get(c(mag_7, spy_ticker), from = "2023-01-01")
+
+# Compute daily returns
+returns_df <- prices %>%
+  group_by(symbol) %>%
+  tq_transmute(
+    select = adjusted,
+    mutate_fun = periodReturn,
+    period = "daily",
+    col_rename = "ret"
+  )
+
+# Rolling 30-day volatility
+volatility_df <- returns_df %>%
+  group_by(symbol) %>%
+  arrange(date) %>%
+  mutate(sd = zoo::rollapply(ret, width = 30, FUN = sd, fill = NA, align = "right")) %>%
+  ungroup() %>%
+  mutate(group = ifelse(symbol == "SPY", "S&P 500", "Mag 7 Average")) %>%
+  group_by(group, date) %>%
+  summarize(sd = mean(sd, na.rm = TRUE), .groups = "drop")
+
+# Plot
+ggplot(volatility_df, aes(x = date, y = sd, color = group)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("#38bdf8", "red")) +
+  labs(title = "Rolling 30-Day Standard Deviation of Returns",
+       x = NULL, y = "Volatility (SD)", color = NULL) +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+<div style="font-size: 0.81em;">
+- The Mag 7 prices are highly volatile, fluctuating far more than the typical stock
+- Rapid growth means investors are in for a much rougher ride
+</div>
+
+## Nvidia's Insane Momentum
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# Nvidia golden cross
+prices %>%
+  filter(symbol == "NVDA") %>%
+  filter(date >= "2023-01-01") %>%
+  ggplot(aes(x = date, y = adjusted, open = open, high = high, low = low, close = close)) +
+  # Using blue for the candlesticks
+  geom_candlestick(colour_up = "#38bdf8", colour_down = "red", fill_up = "#38bdf8", fill_down = "red") +
+  # 50 day moving average
+  geom_ma(ma_fun = SMA, n = 50, color = "#38bdf8", size = 1.25) +
+  # 200 day moving average
+  geom_ma(ma_fun = SMA, n = 200, color = "black", linetype = "dashed", size = 1) +
+  labs(title = "Golden Cross (Nvidia)",
+       subtitle = "50-Day SMA (Blue) vs. 200-Day SMA (Dashed Black)",
+       x = NULL, y = "Adjusted Price") +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "none"
+)
+```
+<div style="font-size: 0.81em;">
+- The aggressive momentum (blue) recently surpassed the long-term average (black)
+- This illustrates Nvidia has stepped into "another gear," experiencing extremely rapid growth
+</div>
+
+## Pushing Mathematical Limits
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# Bollinger band
+prices %>%
+  filter(symbol %in% mag_7) %>%
+  group_by(date) %>%
+  summarize(price = mean(adjusted)) %>%
+  # Use tq_mutate to calculate bands manually
+  tq_mutate(select = price, 
+            mutate_fun = BBands, 
+            ma_fun = SMA, sd = 2, n = 20) %>%
+  ggplot(aes(x = date, y = price)) +
+  # ribbon (shaded area)
+  geom_ribbon(aes(ymin = dn, ymax = up), fill = "#38bdf8", alpha = 0.2) +
+  # midline (moving average)
+  geom_line(aes(y = mavg), color = "#38bdf8", linetype = "dashed", alpha = 0.5) +
+  # actual price line
+  geom_line(color = "red", size = 1) +
+  labs(title = "Bollinger Bands",
+       subtitle = "Bollinger Bands on Magnificent Seven Average",
+       x = NULL, y = "Price Index") +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+<div style="font-size: 0.81em;">
+- The price line is skirting the upper limit of its "normal" price range
+- This means the stock may be extended beyond normal levels
+</div>
+
+## Entering the Danger Zone
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# RSi
+prices %>%
+  filter(symbol %in% mag_7) %>%
+  group_by(date) %>%
+  summarize(price = mean(adjusted)) %>%
+  tq_mutate(select = price, mutate_fun = RSI, n = 14) %>%
+  filter(!is.na(rsi)) %>%
+  ggplot(aes(x = date, y = rsi)) +
+  geom_line(color = "#38bdf8", size = 1) +
+  # Overbought & oversold reference lines
+  geom_hline(yintercept = 70, linetype = "dashed", color = "#94a3b8") +
+  geom_hline(yintercept = 30, linetype = "dashed", color = "#94a3b8") +
+  annotate("text", x = as.Date("2023-03-01") +100, y = 75, label = "Overbought (70)", color = "#94a3b8") +
+  annotate("text", x = as.Date("2023-03-01") +100, y = 25, label = "Underbought (30)", color = "#94a3b8") +
+  labs(title = "RSI",
+       subtitle = "14-Day RSI: Magnificent Seven Average",
+       x = NULL, y = "RSI Value") +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+<div style="font-size: 0.81em;">
+- An RSI above 70 signals the stock is "red hot" and overbought
+- Stocks often crash soon after reaching such high temperatures
+</div>
+
+## The Crash
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# drawdown
+returns_data %>%
+  # use returns data we calculated earlier
+  mutate(group = ifelse(symbol %in% mag_7, "Magnificent Seven", "S&P 500")) %>%
+  group_by(group, date) %>%
+  summarize(ret = mean(ret), .groups = "drop") %>%
+  group_by(group) %>%
+  mutate(
+    cum_ret_index = cumprod(1 + ret),
+    running_max   = cummax(cum_ret_index),
+    drawdown      = (cum_ret_index / running_max) - 1
+  ) %>%
+  ggplot(aes(x = date, y = drawdown, fill = group)) +
+  geom_area(position = "identity", alpha = 0.5) +
+  scale_fill_manual(values = c("Magnificent Seven" = "#38bdf8", "S&P 500" = "red")) +
+  scale_y_continuous(labels = percent) +
+  labs(title = "Cost of Dominance: Drawdown Analysis",
+       subtitle = "Percentage Decline from Previous Peak",
+       x = NULL, y = "Drawdown (%)", fill = NULL) +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+<div style="font-size: 0.81em;">
+- This graph reveals how much money investors stand to lose during their "bad" periods
+- Although they experience deep drops, these stocks quickly bounce back
+</div>
+
+## Correlation Heatmap
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+library(GGally)
+
+# correlation heatmap
+all_data %>%
+  filter(symbol %in% mag_7) %>%
+  group_by(symbol) %>%
+  tq_transmute(select = adjusted, mutate_fun = periodReturn, period = "monthly", col_rename = "ret") %>%
+  pivot_wider(names_from = symbol, values_from = ret) %>%
+  select(-date) %>%
+  ggcorr(label = TRUE, label_size = 4, label_color = "white", 
+         low = "#94a3b8", mid = "#020617", high = "#38bdf8",
+         name = "Correlation") +
+  labs(title = "Correlation Matrix") +
+  theme_minimal(base_size = 16) +
+  theme(
+  axis.title = element_text(size = 14),
+  axis.text = element_text(size = 14),
+  legend.text = element_text(size = 14)
+)
+```
+<div style="font-size: 0.81em;">
+- These seven stocks all tend to go up and down all at the same time
+- One failing company can bring them all crashing down together
+</div>
+
+## Monthly Performance Heatmap
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+#monthly return heatmap
+returns_data %>%
+  mutate(group = ifelse(symbol %in% mag_7, "Magnificent Seven", "S&P 500")) %>%
+  group_by(group, month = floor_date(date, "month")) %>%
+  summarize(monthly_ret = mean(ret), .groups = "drop") %>%
+  ggplot(aes(x = month, y = group, fill = monthly_ret)) +
+  geom_tile(color = "#020617", size = 1) +
+  scale_fill_gradient2(low = "red", mid = "#94a3b8", high = "#38bdf8", 
+                       labels = percent, name = "Return") +
+  labs(title = "Monthly Return Clusters: Mag 7 vs. Index",
+       x = NULL, y = NULL) +
+  theme_minimal(base_size = 22) +
+  theme(
+  axis.title = element_text(size = 16),
+  axis.text = element_text(size = 14),
+  legend.text = element_text(size = 14)
+)
+```
+<div style="font-size: 0.81em;">
+- This graph indicates which months saw "blue" (good) or "red" (bad) returns
+- The patterns show that the growth isn't random but happens in bursts
+</div>
+
+## Moving Faster than the Market
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# fixed rolling beta (market sensitivity)
+returns_data %>%
+  mutate(group = ifelse(symbol %in% mag_7, "Mag7", "SPY")) %>%
+  group_by(group, date) %>%
+  summarize(ret = mean(ret), .groups = "drop") %>%
+  pivot_wider(names_from = group, values_from = ret) %>%
+  tq_mutate_xy(
+    x = Mag7, 
+    y = SPY, 
+    mutate_fun = rollapply,
+    width      = 60,
+    FUN        = CAPM.beta,
+    by.column  = FALSE,
+    col_rename = "rolling_beta"
+  ) %>%
+  na.omit() %>%
+  ggplot(aes(x = date, y = rolling_beta)) +
+  geom_line(color = "#38bdf8", size = 1.5) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "white") +
+  annotate("text", x = min(returns_data$date), y = 1.1, 
+           label = "More Volatile Than Market", color = "#94a3b8", hjust = 0) +
+  labs(title = "60-Day Rolling Beta of Magnificent Seven vs. S&P 500",
+       x = NULL, y = "Beta Coefficient") +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  legend.position = "bottom"
+)
+```
+<div style="font-size: 0.81em;">
+- These stocks respond more strongly to market news than the S&P 500
+- As the market moves an inch, these stocks move a mile
+</div>
+
+## High Stakes, High Returns
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-align: "center"
+#| fig-width: 10
+#| fig-height: 5
+# risk v reward
+returns_data %>%
+  group_by(symbol) %>%
+  tq_performance(Ra = ret, Rb = NULL, performance_fun = table.Stats) %>%
+  select(symbol, ArithmeticMean, Stdev) %>%
+  mutate(is_mag7 = ifelse(symbol %in% mag_7, "Magnificent Seven", "S&P 500")) %>%
+  ggplot(aes(x = Stdev, y = ArithmeticMean, color = is_mag7)) +
+  geom_point(aes(size = is_mag7), alpha = 0.7) +
+  scale_size_manual(values = c("Magnificent Seven" = 8, "S&P 500" = 3)) +
+  scale_color_manual(values = c("Magnificent Seven" = "#38bdf8", "S&P 500" = "red")) +
+  theme_minimal(base_size = 24) +
+  theme(
+  axis.title = element_text(size = 22),
+  axis.text = element_text(size = 20),
+  legend.text = element_text(size = 20)
+)
+```
+<div style="font-size: 0.81em;">
+- You stand to make substantially more money, but you take substantially greater risks of losing money
+- The Mag 7 are outliers on the graph, distant from “ordinary” stocks
+</div>
+
+# So what?
+- Diversification is an illusion right now
+- Even if your portfolio seems "diversified," your investments in the S&P 500 almost completely depend on seven technology companies. Whatever happens to these companies will also happen to your investments.
+
+## References & Repos{.smaller}
+
+:::: {.columns}
+
+::: {.column width="60%"} 
+- ```tidyquant``` [vignette](https://github.com/williamorton06/R-Lightning-Talk/tree/main)
+
+- Dancho, M., & Vaughan, D. (2026). Package ‘tidyquant’. CRAN. https://CRAN.R-project.org/package=tidyquant
+
+- **Grobys, K. (2025).** *Magnificent 7: unsustainable growth and systemic risk.* Review of Quantitative Finance and Accounting.
+
+-   **Nenkov, D. (2024).** *"The Magnificent Seven" Technology Stocks and Their Impact on the S&P 500: A Review 4 Years Later.* Finance, Accounting and Business Analysis.
+
+:::
+
+::: {.column width="40%"}
+#### Contact
+
+William_Orton1@baylor.edu
+Github @williamorton06
+:::
+
+::::
