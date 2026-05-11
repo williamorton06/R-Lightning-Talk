@@ -1,0 +1,147 @@
+---
+title: "Worked-Example"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyquant)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+```
+
+```{r}
+#Using tq_index() and tq_exchange()
+
+# Get stocks from the S&P 500
+sp500_data <- tq_index("SP500")
+glimpse(sp500_data)
+
+# Get stocks from the NASDAQ exchange
+nasdaq_data <- tq_exchange("NASDAQ")
+glimpse(nasdaq_data)
+```
+
+```{r}
+#Getting qualitative data using tq_get()
+
+# Get daily stock data for apple from yahoo
+aapl_data <- tq_get("AAPL", get = "stock.prices", from = "2025-01-01")
+glimpse(aapl_data)
+
+# Get U.S. consumer price index (CPI) data from FRED database
+cpi_data <- tq_get("CPIAUCSL", get = "economic.data", from = "2025-01-01")
+glimpse(cpi_data)
+```
+
+
+```{r}
+#Modify data w/ tq_mutate
+
+# Calculate 5 day simple moving average (SMA) and add it as a new column
+aapl_with_sma <- aapl_data %>%
+  tq_mutate(select = close, mutate = SMA, n = 5)
+glimpse(aapl_with_sma)
+```
+```{r}
+#Transmute data w/ tq_transmute()
+
+# Convert daily stock prices into monthly returns
+aapl_monthly <- aapl_data %>%
+  tq_transmute(select = adjusted, mutate = periodReturn, period = "monthly")
+
+glimpse(aapl_monthly)
+```
+
+
+```{r}
+cpi_data <- tq_get("CPIAUCSL", get = "economic.data", from = "2016-01-01")
+
+ggplot(cpi_data, aes(x = date, y = price)) +
+  geom_line(color = "darkgreen", linewidth = 1) +
+  theme_minimal() +
+  labs(
+    title = "U.S. Consumer Price Index (2016–Present)",
+    subtitle = "Measures the overall change in prices paid by urban consumers",
+    x = "Date",
+    y = "Index Value (Base 1982-1984 = 100)"
+  )
+```
+
+```{r}
+cpi_rate <- tq_get("CPIAUCSL", get = "economic.data", from = "2016-01-01") %>%
+  mutate(inflation_rate = (price / lag(price, 12) - 1) * 100) %>%
+  na.omit()
+
+ggplot(cpi_rate, aes(x = date, y = inflation_rate)) +
+  geom_line(color = "firebrick", linewidth = 1.1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "U.S. Year-over-Year Inflation Rate",
+    subtitle = "Calculated as the percentage change from the same month in the prior year",
+    x = "Date",
+    y = "Inflation Rate (%)"
+  )
+```
+
+```{r}
+ggplot(cpi_rate, aes(x = date, y = inflation_rate)) +
+  annotate("rect", xmin = as.Date("2021-03-01"), xmax = as.Date("2023-01-01"), 
+           ymin = -Inf, ymax = Inf, alpha = 0.15, fill = "orange") +
+  geom_line(color = "darkblue", linewidth = 1) +
+  geom_hline(yintercept = 2, linetype = "dashed", color = "red", linewidth = 0.8) +
+  theme_minimal() +
+  labs(
+    title = "Inflation Surge Compared to the Target Rate",
+    subtitle = "The dashed line represents the 2% traditional inflation target",
+    x = "Date",
+    y = "Inflation Rate (%)"
+  )
+```
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+library(scales)
+
+# 1. Define the groups
+mag_7 <- c("AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA")
+spy_ticker <- "SPY" # The broad market ETF
+
+# 2. Fetch Data
+all_data <- tq_get(c(mag_7, spy_ticker), from = "2023-01-01")
+
+# 3. Calculate Cumulative Returns
+returns_data <- all_data %>%
+  group_by(symbol) %>%
+  tq_transmute(select = adjusted, mutate_fun = periodReturn, period = "daily", col_rename = "ret") %>%
+  mutate(cum_ret = cumprod(1 + ret) - 1)
+
+# 4. Separate Mag 7 Average vs the Index
+mag7_avg <- returns_data %>%
+  filter(symbol %in% mag_7) %>%
+  group_by(date) %>%
+  summarize(cum_ret = mean(cum_ret), group = "Magnificent Seven")
+
+market_bench <- returns_data %>%
+  filter(symbol == "SPY") %>%
+  select(date, cum_ret) %>%
+  mutate(group = "S&P 500 (Market)")
+
+# 5. The Plot
+ggplot() +
+  geom_line(data = mag7_avg, aes(x = date, y = cum_ret, color = group), size = 1.5) +
+  geom_line(data = market_bench, aes(x = date, y = cum_ret, color = group), size = 1, linetype = "dashed") +
+  scale_y_continuous(labels = percent) +
+  scale_color_manual(values = c("Magnificent Seven" = "#38bdf8", "S&P 500 (Market)" = "#94a3b8")) +
+  labs(
+    title = "The Great Decoupling",
+    subtitle = "Visualizing the 'Magic Trick': The Mag 7 vs. The Total Index",
+    x = NULL, y = "Cumulative Return", color = NULL
+  ) +
+  theme_minimal(base_size = 18) +
+  theme(legend.position = "bottom")
+```
+
